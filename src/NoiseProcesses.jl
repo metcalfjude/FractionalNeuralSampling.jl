@@ -27,15 +27,24 @@ function LevyNoise!(args...)
 end
 
 dist(L::LevyNoise) = Stable(L.α, L.β, L.σ, L.μ)
+subordinator_dist(L::LevyNoise) = Stable(L.α / 2, 1.0, 1.0, 0.0)
 
 @inline function (L::LevyNoise{true})(rng::AbstractRNG, rand_vec::AbstractVector)
-    rand_vecs = divide_dims(rand_vec, L.ND) # * Add ND noise independently to each column (each variable)
+    rand_vecs = divide_dims(rand_vec, L.ND)
+    
+    # coeff = sqrt(2)*(cos(pi * L.α / 4.0))^(1.0 / L.α)
+    
     return map(rand_vecs) do x
-        randn!(rng, x) # * Choose a point from a spherical distribution
-        x ./= norm(x) # * Normalize the vector
-        x .*= rand(rng, dist(L)) # * Take a levy step in the chosen direction
+        randn!(rng, x) # Z ~ N(0, I)
+        
+        # Draw standard subordinator U ~ S_{alpha/2}(1, 1, 0)
+        U = clamp.(rand(rng, subordinator_dist(L)), 0.0, Inf)
+        
+        # Apply subordinator and coefficient
+        x .*= sqrt(U)
     end
 end
+
 @inline function (L::LevyNoise{true})(rng::AbstractRNG, rand_mat::AbstractMatrix)
     rand_vec = view(rand_mat, diagind(rand_mat))
     return L(rng, rand_vec)
